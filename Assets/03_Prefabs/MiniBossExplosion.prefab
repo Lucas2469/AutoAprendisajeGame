@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8178375069262518025}
   - component: {fileID: 967859873734050202}
+  - component: {fileID: 6849967018303212390}
   m_Layer: 0
   m_Name: MiniBossExplosion
   m_TagString: Untagged
@@ -91,3 +92,15 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!114 &6849967018303212390
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6469403638874969957}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5d7e6831a3539b4d94e8ecdcc2964d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MiniBossExplosion

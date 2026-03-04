@@ -42,14 +42,20 @@ public class CellSpawner : MonoBehaviour
             lastRoundChecked = round;
         }
 
-        // 👹 Spawn MiniBoss
-        if (round > 0 && round % 5 == 0 && !miniBossSpawnedThisRound)
+        bool isBossRound = (round % 5 == 0);
+
+        // 👹 Si es ronda de boss: SOLO boss, sin células normales
+        if (isBossRound)
         {
-            SpawnMiniBoss();
-            miniBossSpawnedThisRound = true;
+            if (!miniBossSpawnedThisRound)
+            {
+                SpawnMiniBoss();
+                miniBossSpawnedThisRound = true;
+            }
+            return; // ✅ bloquea spawn normal en ronda boss
         }
 
-        // Bloquear solo células normales al final
+        // Bloquear células normales al final
         if (remainingTime <= 2f)
             return;
 
@@ -90,12 +96,9 @@ public class CellSpawner : MonoBehaviour
             return;
         }
 
-        // Spawn visible
         Vector2 spawnPosition = new Vector2(0f, 2f);
 
-        GameObject boss = Instantiate(miniBossPrefab, spawnPosition, Quaternion.identity);
-
-        boss.transform.localScale = Vector3.one * 1.5f;
+        Instantiate(miniBossPrefab, spawnPosition, Quaternion.identity);
 
         Debug.Log("👹 MiniBoss Spawned en ronda " + lastRoundChecked);
     }

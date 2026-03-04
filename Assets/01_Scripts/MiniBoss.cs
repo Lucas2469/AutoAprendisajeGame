@@ -3,7 +3,8 @@ using UnityEngine;
 public class MiniBoss : MonoBehaviour
 {
     [Header("Vida")]
-    public int baseHealth = 20;
+    public int baseHealth = 2;                 // 2 clicks en el primer boss
+    public int healthIncreasePerBoss = 5;      // +vida por cada boss nuevo (ronda 5,10,15...)
     private int currentHealth;
     private int maxHealth;
 
@@ -18,25 +19,41 @@ public class MiniBoss : MonoBehaviour
     [Header("Barra Vida")]
     public Transform healthFill;
 
+    [Header("Movimiento")]
+    public Vector2 bounds = new Vector2(8f, 4.5f);
+    private Vector2 moveDirection;
+
+    [Header("Escalado por ronda (velocidad)")]
+    public float baseMoveSpeed = 2.2f;
+    public float speedPerRound = 0.08f; // (0.05–0.12 suele ir bien)
+    private float moveSpeed;
+
     private SpriteRenderer sr;
 
     void Start()
     {
         sr = GetComponent<SpriteRenderer>();
 
-        if (GameManager.Instance == null)
-        {
-            Debug.LogError("GameManager no encontrado.");
-            return;
-        }
+        // Dirección aleatoria
+        moveDirection = Random.insideUnitCircle.normalized;
 
-        int round = GameManager.Instance.GetCurrentRound();
+        // Ronda actual
+        int round = (GameManager.Instance != null) ? GameManager.Instance.GetCurrentRound() : 1;
 
-        maxHealth = baseHealth + round * 5;
+        // Boss number: ronda 5 => #1, ronda 10 => #2, etc.
+        int bossNumber = Mathf.Max(1, round / 5);
+
+        // Vida escalable por cada boss nuevo
+        maxHealth = baseHealth + (bossNumber - 1) * healthIncreasePerBoss;
         currentHealth = maxHealth;
+
+        // Velocidad escalable por ronda (aplica también al boss)
+        moveSpeed = baseMoveSpeed + (round * speedPerRound);
 
         if (normalSprite != null)
             sr.sprite = normalSprite;
+
+        UpdateHealthBar();
     }
 
     void Update()
@@ -44,25 +61,36 @@ public class MiniBoss : MonoBehaviour
         if (GameManager.Instance == null) return;
         if (GameManager.Instance.IsGameOver()) return;
 
+        Move();
         UpdateHealthBar();
         CheckPhase();
     }
 
+    void Move()
+    {
+        transform.Translate(moveDirection * moveSpeed * Time.deltaTime);
+
+        if (Mathf.Abs(transform.position.x) > bounds.x)
+            moveDirection.x *= -1;
+
+        if (Mathf.Abs(transform.position.y) > bounds.y)
+            moveDirection.y *= -1;
+    }
+
     void OnMouseDown()
     {
-        TakeDamage(1);
+        TakeDamage(1); // 1 click = 1 daño
     }
 
     void TakeDamage(int amount)
     {
         currentHealth -= amount;
-
-        if (currentHealth <= 0)
-            Die();
+        if (currentHealth <= 0) Die();
     }
 
     void CheckPhase()
     {
+        // Enrage al bajar a la mitad
         if (!isEnraged && currentHealth <= maxHealth / 2)
         {
             isEnraged = true;
@@ -70,7 +98,8 @@ public class MiniBoss : MonoBehaviour
             if (enragedSprite != null)
                 sr.sprite = enragedSprite;
 
-            transform.localScale *= 1.2f;
+            transform.localScale *= 1.15f;
+            moveSpeed *= 1.15f; // más rápido al enfadarse
         }
     }
 
@@ -84,6 +113,9 @@ public class MiniBoss : MonoBehaviour
 
     void Die()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayBossKill();
+
         if (GameManager.Instance != null)
             GameManager.Instance.AddScore(50);
 
@@ -93,17 +125,19 @@ public class MiniBoss : MonoBehaviour
 
     void ExplodeAndClearCells()
     {
+        // Explosión con auto-destrucción por seguridad
         if (explosionPrefab != null)
-            Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+        {
+            GameObject fx = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+            Destroy(fx, 0.6f);
+        }
 
+        // Limpia células cercanas (si quieres que en ronda boss no haya cells, igual sirve por si quedaron)
         GameObject[] cells = GameObject.FindGameObjectsWithTag("Cell");
-
         foreach (GameObject cell in cells)
         {
             if (Vector2.Distance(transform.position, cell.transform.position) < 3f)
-            {
                 Destroy(cell);
-            }
         }
     }
 }
