@@ -23,11 +23,21 @@ public class GameManager : MonoBehaviour
 
     void Awake()
     {
+        // Evita duplicados
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
     }
 
     void Start()
     {
+        // ✅ Asegurar panel oculto (aunque lo tengas desactivado en Inspector, esto evita errores)
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(false);
+
         scoreText.text = "SCORE: 0";
         roundText.text = "ROUND: 1";
         StartRound();
@@ -85,7 +95,6 @@ public class GameManager : MonoBehaviour
         return isGameOver;
     }
 
-    // 🔥 NUEVO MÉTODO
     public float GetRemainingTime()
     {
         return currentTime;
@@ -114,6 +123,10 @@ public class GameManager : MonoBehaviour
     public void RestartGame()
     {
         Time.timeScale = 1f;
+
+        // ✅ Resetear estado global acumulado (tamaño/velocidad/camuflaje/transparencia)
+        ClickFeedback.ResetAll();
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }

@@ -106,7 +106,7 @@ GameObject:
   - component: {fileID: 2527734460942701702}
   m_Layer: 0
   m_Name: MiniBoss
-  m_TagString: Untagged
+  m_TagString: MiniBoss
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -140,10 +140,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MiniBoss
   baseHealth: 10
+  healthIncreasePerBoss: 5
   normalSprite: {fileID: -6322934865546195339, guid: a4d78ada5776f024fae43771c85757d3, type: 3}
   enragedSprite: {fileID: 8712363779982280127, guid: 609c07f2101d1e443a2779fa20502a36, type: 3}
   explosionPrefab: {fileID: 6469403638874969957, guid: 12f002f3ee2a71046ba8843c855fa414, type: 3}
   healthFill: {fileID: 271821231347207663}
+  bounds: {x: 8, y: 4.5}
+  baseMoveSpeed: 2.2
+  speedPerRound: 0.08
 --- !u!212 &422711915828716082
 SpriteRenderer:
   serializedVersion: 2

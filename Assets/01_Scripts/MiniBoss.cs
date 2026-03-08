@@ -25,8 +25,13 @@ public class MiniBoss : MonoBehaviour
 
     [Header("Escalado por ronda (velocidad)")]
     public float baseMoveSpeed = 2.2f;
-    public float speedPerRound = 0.08f; // (0.05–0.12 suele ir bien)
+    public float speedPerRound = 0.08f;
     private float moveSpeed;
+
+    // Para aplicar tamaño global sin romper el enraged
+    private Vector3 baseScale;
+    private float enragedScaleMult = 1f;
+    private int lastFeedbackVersion = -1;
 
     private SpriteRenderer sr;
 
@@ -34,25 +39,22 @@ public class MiniBoss : MonoBehaviour
     {
         sr = GetComponent<SpriteRenderer>();
 
-        // Dirección aleatoria
         moveDirection = Random.insideUnitCircle.normalized;
 
-        // Ronda actual
         int round = (GameManager.Instance != null) ? GameManager.Instance.GetCurrentRound() : 1;
-
-        // Boss number: ronda 5 => #1, ronda 10 => #2, etc.
         int bossNumber = Mathf.Max(1, round / 5);
 
-        // Vida escalable por cada boss nuevo
         maxHealth = baseHealth + (bossNumber - 1) * healthIncreasePerBoss;
         currentHealth = maxHealth;
 
-        // Velocidad escalable por ronda (aplica también al boss)
         moveSpeed = baseMoveSpeed + (round * speedPerRound);
 
         if (normalSprite != null)
             sr.sprite = normalSprite;
 
+        baseScale = transform.localScale;
+
+        ApplyFeedbackScaleIfNeeded(force: true);
         UpdateHealthBar();
     }
 
@@ -61,14 +63,26 @@ public class MiniBoss : MonoBehaviour
         if (GameManager.Instance == null) return;
         if (GameManager.Instance.IsGameOver()) return;
 
+        ApplyFeedbackScaleIfNeeded(force: false);
+
         Move();
         UpdateHealthBar();
         CheckPhase();
     }
 
+    void ApplyFeedbackScaleIfNeeded(bool force)
+    {
+        if (!force && lastFeedbackVersion == ClickFeedback.version) return;
+        lastFeedbackVersion = ClickFeedback.version;
+
+        float size = Mathf.Max(0.5f, ClickFeedback.sizeMult);
+        transform.localScale = baseScale * enragedScaleMult * size;
+    }
+
     void Move()
     {
-        transform.Translate(moveDirection * moveSpeed * Time.deltaTime);
+        float effectiveSpeed = moveSpeed * ClickFeedback.speedMult;
+        transform.Translate(moveDirection * effectiveSpeed * Time.deltaTime);
 
         if (Mathf.Abs(transform.position.x) > bounds.x)
             moveDirection.x *= -1;
@@ -79,7 +93,7 @@ public class MiniBoss : MonoBehaviour
 
     void OnMouseDown()
     {
-        TakeDamage(1); // 1 click = 1 daño
+        TakeDamage(1);
     }
 
     void TakeDamage(int amount)
@@ -90,7 +104,6 @@ public class MiniBoss : MonoBehaviour
 
     void CheckPhase()
     {
-        // Enrage al bajar a la mitad
         if (!isEnraged && currentHealth <= maxHealth / 2)
         {
             isEnraged = true;
@@ -98,8 +111,9 @@ public class MiniBoss : MonoBehaviour
             if (enragedSprite != null)
                 sr.sprite = enragedSprite;
 
-            transform.localScale *= 1.15f;
-            moveSpeed *= 1.15f; // más rápido al enfadarse
+            enragedScaleMult = 1.15f; // ✅ no tocamos localScale directo
+            moveSpeed *= 1.15f;       // enrage acelera aparte
+            ApplyFeedbackScaleIfNeeded(force: true);
         }
     }
 
@@ -116,6 +130,9 @@ public class MiniBoss : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayBossKill();
 
+        // ✅ recompensa también por matar boss (opcional, pero recomendable)
+        ClickFeedback.RewardKill();
+
         if (GameManager.Instance != null)
             GameManager.Instance.AddScore(50);
 
@@ -125,14 +142,12 @@ public class MiniBoss : MonoBehaviour
 
     void ExplodeAndClearCells()
     {
-        // Explosión con auto-destrucción por seguridad
         if (explosionPrefab != null)
         {
             GameObject fx = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
             Destroy(fx, 0.6f);
         }
 
-        // Limpia células cercanas (si quieres que en ronda boss no haya cells, igual sirve por si quedaron)
         GameObject[] cells = GameObject.FindGameObjectsWithTag("Cell");
         foreach (GameObject cell in cells)
         {

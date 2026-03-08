@@ -46,6 +46,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 931918ce2f6730f47a39dcfb8f63e31a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Cell
+  baseSpeed: 1.5
+  speedPerRound: 0.3
+  baseScale: 1
+  scaleShrinkPerRound: 0.05
+  minScale: 0.5
+  blueUnlockRound: 8
+  blueFullRound: 20
+  blueHueMin: 0.55
+  blueHueMax: 0.7
+  camoCyan: {r: 0, g: 0.95, b: 1, a: 1}
+  camoSky: {r: 0.45, g: 0.85, b: 1, a: 1}
+  camoNavy: {r: 0.05, g: 0.1, b: 0.35, a: 1}
+  minAlpha: 0.4
+  minInvisibleInterval: 2
+  maxInvisibleInterval: 5
+  minInvisibleDuration: 0.5
+  maxInvisibleDuration: 1
 --- !u!212 &9191210526265780497
 SpriteRenderer:
   serializedVersion: 2
