@@ -17,7 +17,6 @@ public class ButtonHoverScale : MonoBehaviour, IPointerEnterHandler, IPointerExi
 
     void Update()
     {
-        // UnscaledDeltaTime para que funcione en Game Over (timeScale=0)
         transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.unscaledDeltaTime * speed);
     }
 

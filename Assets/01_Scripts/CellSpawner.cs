@@ -6,45 +6,34 @@ public class CellSpawner : MonoBehaviour
     public GameObject cellPrefab;
     public GameObject miniBossPrefab;
 
-    [Header("Spawn Settings")]
-    public float baseSpawnInterval = 1f;
-    public float minSpawnInterval = 0.3f;
-
+    [Header("Spawn Area")]
     public float spawnAreaX = 8f;
     public float spawnAreaY = 4f;
 
-    [Header("Scaling")]
-    public int baseMaxCells = 5;
+    [Header("Límites")]
+    public int maxCellsOnScreen = 20;
+    public int cellsToSpawnAtRoundStart = 8;
 
-    private float spawnTimer;
-    private float currentSpawnInterval;
-
+    private bool roundSpawnDone = false;
     private bool miniBossSpawnedThisRound = false;
     private int lastRoundChecked = -1;
-
-    void Start()
-    {
-        spawnTimer = baseSpawnInterval;
-    }
 
     void Update()
     {
         if (GameManager.Instance == null) return;
-        if (GameManager.Instance.IsGameOver()) return;
+        if (GameManager.Instance.IsRoundTransitioning()) return;
 
         int round = GameManager.Instance.GetCurrentRound();
-        float remainingTime = GameManager.Instance.GetRemainingTime();
 
-        // Detectar nueva ronda
         if (round != lastRoundChecked)
         {
+            roundSpawnDone = false;
             miniBossSpawnedThisRound = false;
             lastRoundChecked = round;
         }
 
         bool isBossRound = (round % 5 == 0);
 
-        // 👹 Si es ronda de boss: SOLO boss, sin células normales
         if (isBossRound)
         {
             if (!miniBossSpawnedThisRound)
@@ -52,40 +41,53 @@ public class CellSpawner : MonoBehaviour
                 SpawnMiniBoss();
                 miniBossSpawnedThisRound = true;
             }
-            return; // ✅ bloquea spawn normal en ronda boss
+            return;
         }
 
-        // Bloquear células normales al final
-        if (remainingTime <= 2f)
-            return;
-
-        currentSpawnInterval = Mathf.Max(
-            minSpawnInterval,
-            baseSpawnInterval - (round * 0.1f)
-        );
-
-        spawnTimer -= Time.deltaTime;
-
-        if (spawnTimer <= 0f)
+        if (!roundSpawnDone)
         {
-            TrySpawnCells(round);
-            spawnTimer = currentSpawnInterval;
+            SpawnRoundCells();
+            roundSpawnDone = true;
         }
     }
 
-    void TrySpawnCells(int round)
+    void SpawnRoundCells()
     {
         GameObject[] currentCells = GameObject.FindGameObjectsWithTag("Cell");
+        int currentCount = currentCells.Length;
 
-        int maxCellsThisRound = baseMaxCells + (round - 1) * 2;
+        int availableToSpawn = Mathf.Max(0, maxCellsOnScreen - currentCount);
+        int spawnCount = Mathf.Min(cellsToSpawnAtRoundStart, availableToSpawn);
 
-        if (currentCells.Length >= maxCellsThisRound)
-            return;
+        for (int i = 0; i < spawnCount; i++)
+        {
+            Vector2 pos;
+            if (TryGetValidSpawnPosition(out pos))
+            {
+                Instantiate(cellPrefab, pos, Quaternion.identity);
+            }
+        }
+    }
 
-        float randomX = Random.Range(-spawnAreaX, spawnAreaX);
-        float randomY = Random.Range(-spawnAreaY, spawnAreaY);
+    bool TryGetValidSpawnPosition(out Vector2 spawnPos)
+    {
+        Rect blockedRect = GameManager.Instance.GetTrophyWorldBlockRect();
 
-        Instantiate(cellPrefab, new Vector2(randomX, randomY), Quaternion.identity);
+        for (int attempt = 0; attempt < 30; attempt++)
+        {
+            float randomX = Random.Range(-spawnAreaX, spawnAreaX);
+            float randomY = Random.Range(-spawnAreaY, spawnAreaY);
+            Vector2 testPos = new Vector2(randomX, randomY);
+
+            if (!blockedRect.Contains(testPos))
+            {
+                spawnPos = testPos;
+                return true;
+            }
+        }
+
+        spawnPos = Vector2.zero;
+        return false;
     }
 
     void SpawnMiniBoss()
@@ -97,9 +99,6 @@ public class CellSpawner : MonoBehaviour
         }
 
         Vector2 spawnPosition = new Vector2(0f, 2f);
-
         Instantiate(miniBossPrefab, spawnPosition, Quaternion.identity);
-
-        Debug.Log("👹 MiniBoss Spawned en ronda " + lastRoundChecked);
     }
 }

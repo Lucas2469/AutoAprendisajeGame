@@ -140,9 +140,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MiniBoss
   baseHealth: 10
-  healthIncreasePerBoss: 5
-  normalSprite: {fileID: -6322934865546195339, guid: a4d78ada5776f024fae43771c85757d3, type: 3}
-  enragedSprite: {fileID: 8712363779982280127, guid: 609c07f2101d1e443a2779fa20502a36, type: 3}
+  normalSprite: {fileID: 97807840608807711, guid: 2b0417e22313abc49b6b05e88d98d62a, type: 3}
+  enragedSprite: {fileID: 2192238972751936570, guid: acd530e9586868b46979e8802d72ff35, type: 3}
   explosionPrefab: {fileID: 6469403638874969957, guid: 12f002f3ee2a71046ba8843c855fa414, type: 3}
   healthFill: {fileID: 271821231347207663}
   bounds: {x: 8, y: 4.5}

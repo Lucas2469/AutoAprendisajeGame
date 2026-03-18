@@ -1,15 +1,16 @@
+using System.Collections;
 using UnityEngine;
 
 public class MiniBoss : MonoBehaviour
 {
     [Header("Vida")]
-    public int baseHealth = 2;                 // 2 clicks en el primer boss
-    public int healthIncreasePerBoss = 5;      // +vida por cada boss nuevo (ronda 5,10,15...)
+    public int baseHealth = 2;
     private int currentHealth;
     private int maxHealth;
 
     [Header("Fase")]
     private bool isEnraged = false;
+    private bool isBeingMahoragaKilled = false;
 
     [Header("Referencias")]
     public Sprite normalSprite;
@@ -21,30 +22,32 @@ public class MiniBoss : MonoBehaviour
 
     [Header("Movimiento")]
     public Vector2 bounds = new Vector2(8f, 4.5f);
+
+    [Header("Velocidad")]
+    public float baseMoveSpeed = 1.4f;
+    public float speedPerRound = 0.04f;
+
+    private float moveSpeed;
     private Vector2 moveDirection;
 
-    [Header("Escalado por ronda (velocidad)")]
-    public float baseMoveSpeed = 2.2f;
-    public float speedPerRound = 0.08f;
-    private float moveSpeed;
-
-    // Para aplicar tamaño global sin romper el enraged
     private Vector3 baseScale;
     private float enragedScaleMult = 1f;
-    private int lastFeedbackVersion = -1;
 
     private SpriteRenderer sr;
+    private Collider2D col2D;
+    private Collider col3D;
 
     void Start()
     {
         sr = GetComponent<SpriteRenderer>();
+        col2D = GetComponent<Collider2D>();
+        col3D = GetComponent<Collider>();
 
         moveDirection = Random.insideUnitCircle.normalized;
 
         int round = (GameManager.Instance != null) ? GameManager.Instance.GetCurrentRound() : 1;
-        int bossNumber = Mathf.Max(1, round / 5);
 
-        maxHealth = baseHealth + (bossNumber - 1) * healthIncreasePerBoss;
+        maxHealth = baseHealth;
         currentHealth = maxHealth;
 
         moveSpeed = baseMoveSpeed + (round * speedPerRound);
@@ -54,35 +57,25 @@ public class MiniBoss : MonoBehaviour
 
         baseScale = transform.localScale;
 
-        ApplyFeedbackScaleIfNeeded(force: true);
         UpdateHealthBar();
     }
 
     void Update()
     {
         if (GameManager.Instance == null) return;
-        if (GameManager.Instance.IsGameOver()) return;
-
-        ApplyFeedbackScaleIfNeeded(force: false);
+        if (GameManager.Instance.IsRoundTransitioning()) return;
+        if (isBeingMahoragaKilled) return;
 
         Move();
         UpdateHealthBar();
         CheckPhase();
     }
 
-    void ApplyFeedbackScaleIfNeeded(bool force)
-    {
-        if (!force && lastFeedbackVersion == ClickFeedback.version) return;
-        lastFeedbackVersion = ClickFeedback.version;
-
-        float size = Mathf.Max(0.5f, ClickFeedback.sizeMult);
-        transform.localScale = baseScale * enragedScaleMult * size;
-    }
-
     void Move()
     {
-        float effectiveSpeed = moveSpeed * ClickFeedback.speedMult;
-        transform.Translate(moveDirection * effectiveSpeed * Time.deltaTime);
+        transform.localScale = baseScale * enragedScaleMult;
+
+        transform.Translate(moveDirection * moveSpeed * Time.deltaTime);
 
         if (Mathf.Abs(transform.position.x) > bounds.x)
             moveDirection.x *= -1;
@@ -93,13 +86,16 @@ public class MiniBoss : MonoBehaviour
 
     void OnMouseDown()
     {
+        if (isBeingMahoragaKilled) return;
         TakeDamage(1);
     }
 
     void TakeDamage(int amount)
     {
         currentHealth -= amount;
-        if (currentHealth <= 0) Die();
+
+        if (currentHealth <= 0)
+            DieByPlayer();
     }
 
     void CheckPhase()
@@ -111,9 +107,8 @@ public class MiniBoss : MonoBehaviour
             if (enragedSprite != null)
                 sr.sprite = enragedSprite;
 
-            enragedScaleMult = 1.15f; // ✅ no tocamos localScale directo
-            moveSpeed *= 1.15f;       // enrage acelera aparte
-            ApplyFeedbackScaleIfNeeded(force: true);
+            enragedScaleMult = 1.15f;
+            moveSpeed *= 1.15f;
         }
     }
 
@@ -125,16 +120,50 @@ public class MiniBoss : MonoBehaviour
         healthFill.localScale = new Vector3(ratio, 1f, 1f);
     }
 
-    void Die()
+    void DieByPlayer()
     {
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayBossKill();
 
-        // ✅ recompensa también por matar boss (opcional, pero recomendable)
-        ClickFeedback.RewardKill();
-
         if (GameManager.Instance != null)
-            GameManager.Instance.AddScore(50);
+            GameManager.Instance.AddScore(5);
+
+        ExplodeAndClearCells();
+        Destroy(gameObject);
+    }
+
+    public void BeginMahoragaElimination(float duration)
+    {
+        if (isBeingMahoragaKilled) return;
+        StartCoroutine(MahoragaEliminationRoutine(duration));
+    }
+
+    IEnumerator MahoragaEliminationRoutine(float duration)
+    {
+        isBeingMahoragaKilled = true;
+
+        if (col2D != null) col2D.enabled = false;
+        if (col3D != null) col3D.enabled = false;
+
+        Vector3 startScale = transform.localScale;
+        Vector3 basePos = transform.position;
+
+        float timer = 0f;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            float t = Mathf.Clamp01(timer / duration);
+
+            float shakeX = Mathf.Sin(timer * 30f) * 0.04f;
+            float shakeY = Mathf.Cos(timer * 24f) * 0.04f;
+            transform.position = basePos + new Vector3(shakeX, shakeY, 0f);
+
+            float pulse = 1f + Mathf.Sin(timer * 14f) * 0.04f;
+            transform.localScale = Vector3.Lerp(startScale, startScale * 0.85f, t) * pulse;
+
+            yield return null;
+        }
 
         ExplodeAndClearCells();
         Destroy(gameObject);

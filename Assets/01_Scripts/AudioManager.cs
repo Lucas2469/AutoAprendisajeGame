@@ -9,10 +9,12 @@ public class AudioManager : MonoBehaviour
     public AudioSource sfxSource;
 
     [Header("Clips")]
-    public AudioClip backgroundMusic;   // asignas tu música aquí
+    public AudioClip backgroundMusic;
     public AudioClip cellKillSfx;
     public AudioClip bossKillSfx;
-    public AudioClip clickSfx;          // opcional
+    public AudioClip clickSfx;
+    public AudioClip bonusSfx;
+    public AudioClip mahoragaSfx;
 
     void Awake()
     {
@@ -28,11 +30,10 @@ public class AudioManager : MonoBehaviour
 
     void Start()
     {
-        // Música en loop
         if (musicSource != null && backgroundMusic != null)
         {
             musicSource.clip = backgroundMusic;
-            musicSource.loop = true;          // ✅ se repite sola al terminar
+            musicSource.loop = true;
             musicSource.Play();
         }
     }
@@ -53,5 +54,17 @@ public class AudioManager : MonoBehaviour
     {
         if (sfxSource != null && clickSfx != null)
             sfxSource.PlayOneShot(clickSfx);
+    }
+
+    public void PlayBonus()
+    {
+        if (sfxSource != null && bonusSfx != null)
+            sfxSource.PlayOneShot(bonusSfx);
+    }
+
+    public void PlayMahoraga()
+    {
+        if (sfxSource != null && mahoragaSfx != null)
+            sfxSource.PlayOneShot(mahoragaSfx);
     }
 }

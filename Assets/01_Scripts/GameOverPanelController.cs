@@ -5,17 +5,17 @@ using TMPro;
 public class GameOverPanelController : MonoBehaviour
 {
     [Header("UI")]
-    public TextMeshProUGUI titleText;   // GAME OVER
-    public Image badgeImage;            // imagen del centro
+    public TextMeshProUGUI titleText;
+    public Image badgeImage;
 
     [Header("Badges (PNGs)")]
-    public Sprite rondaBaja;            // Ronda 1-3
-    public Sprite rondaMedia;           // Ronda 4-6
-    public Sprite rondaAlta;            // Ronda 7-9
-    public Sprite rondaMuyAlta;         // Ronda 10+
+    public Sprite rondaBaja;
+    public Sprite rondaMedia;
+    public Sprite rondaAlta;
+    public Sprite rondaMuyAlta;
 
     [Header("Animación título")]
-    public float moveAmplitude = 12f;   // píxeles
+    public float moveAmplitude = 12f;
     public float moveSpeed = 1.5f;
 
     private RectTransform titleRect;
@@ -32,14 +32,12 @@ public class GameOverPanelController : MonoBehaviour
 
     void OnEnable()
     {
-        // Cuando se activa el panel, elige imagen por ronda
         if (GameManager.Instance != null)
             SetBadgeForRound(GameManager.Instance.GetCurrentRound());
     }
 
     void Update()
     {
-        // animación suave izquierda-derecha
         if (titleRect != null)
         {
             float x = Mathf.Sin(Time.unscaledTime * moveSpeed) * moveAmplitude;
