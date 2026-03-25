@@ -120,13 +120,18 @@ public class MiniBoss : MonoBehaviour
         healthFill.localScale = new Vector3(ratio, 1f, 1f);
     }
 
+    // Dentro del método DieByPlayer(), añadir la línea:
     void DieByPlayer()
     {
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayBossKill();
 
         if (GameManager.Instance != null)
-            GameManager.Instance.AddScore(5);
+        {
+            GameManager.Instance.AddScore(10);
+            // Terminar la ronda inmediatamente
+            GameManager.Instance.EndRoundEarly();
+        }
 
         ExplodeAndClearCells();
         Destroy(gameObject);

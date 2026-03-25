@@ -6,7 +6,6 @@ public class Cell : MonoBehaviour
     private float moveSpeed;
     private Vector2 moveDirection;
     private SpriteRenderer spriteRenderer;
-
     private Collider2D col2D;
     private Collider col3D;
 
@@ -17,9 +16,6 @@ public class Cell : MonoBehaviour
     [Header("Escala base")]
     public float minScale = 0.75f;
     public float maxScale = 1.0f;
-
-    [Header("Camuflaje total")]
-    public Sprite fullyAdaptedSprite;
 
     private bool isAdapting = false;
     private Vector3 originalScale;
@@ -39,17 +35,7 @@ public class Cell : MonoBehaviour
 
         if (GameManager.Instance != null && spriteRenderer != null)
         {
-            if (GameManager.Instance.IsFullyAdapted())
-            {
-                if (fullyAdaptedSprite != null)
-                    spriteRenderer.sprite = fullyAdaptedSprite;
-
-                spriteRenderer.color = GameManager.Instance.GetFinalAdaptedColor();
-            }
-            else
-            {
-                spriteRenderer.color = GameManager.Instance.GetSpawnColor();
-            }
+            spriteRenderer.color = GameManager.Instance.GetSpawnColor();
         }
     }
 
@@ -66,14 +52,10 @@ public class Cell : MonoBehaviour
     {
         Vector3 nextPos = transform.position + (Vector3)(moveDirection * moveSpeed * Time.deltaTime);
 
-        if (Mathf.Abs(nextPos.x) > 8f)
-            moveDirection.x *= -1;
-
-        if (Mathf.Abs(nextPos.y) > 4.5f)
-            moveDirection.y *= -1;
+        if (Mathf.Abs(nextPos.x) > 8f) moveDirection.x *= -1;
+        if (Mathf.Abs(nextPos.y) > 4.5f) moveDirection.y *= -1;
 
         Rect blockedRect = GameManager.Instance.GetTrophyWorldBlockRect();
-
         if (blockedRect.Contains(nextPos))
         {
             moveDirection = -moveDirection;
@@ -87,7 +69,6 @@ public class Cell : MonoBehaviour
     {
         if (!gameObject.activeInHierarchy) return;
         if (isAdapting) return;
-
         StartCoroutine(AdaptationRoutine(targetColor, duration));
     }
 
@@ -103,7 +84,6 @@ public class Cell : MonoBehaviour
         Vector3 basePos = transform.position;
 
         float timer = 0f;
-
         while (timer < duration)
         {
             timer += Time.deltaTime;
@@ -131,7 +111,9 @@ public class Cell : MonoBehaviour
         if (isAdapting) return;
         if (spriteRenderer == null) return;
 
-        GameManager.Instance.RegisterKilledCellColor(spriteRenderer.color);
+        // Registrar la muerte para el contador de la ronda
+        GameManager.Instance.RegisterCellKill();
+
         GameManager.Instance.AddScore(1);
 
         if (AudioManager.Instance != null)
@@ -139,4 +121,7 @@ public class Cell : MonoBehaviour
 
         Destroy(gameObject);
     }
+
+    // Método auxiliar para que GameManager pueda obtener el color actual
+    public SpriteRenderer GetSpriteRenderer() => spriteRenderer;
 }

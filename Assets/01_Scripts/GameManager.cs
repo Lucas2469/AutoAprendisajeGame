@@ -12,8 +12,6 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI scoreText;
     public TextMeshProUGUI timerText;
     public TextMeshProUGUI roundText;
-    public TextMeshProUGUI adaptText;
-    public TextMeshProUGUI mahoragaTurnsText;
 
     [Header("Trofeo fijo")]
     public Image trophyImage;
@@ -26,32 +24,28 @@ public class GameManager : MonoBehaviour
     [Header("Round Settings")]
     public float roundDuration = 10f;
 
-    [Header("Adaptación progresiva normal")]
-    public Color backgroundTargetColor = new Color32(20, 90, 130, 255);
-    public Color fullyAdaptedFinalColor = new Color32(20, 90, 130, 255);
-    [Range(0f, 1f)] public float adaptationLevel = 0f;
-    public float adaptationIncreasePerFailedRound = 0.05f;
-    public int maxStoredKilledColors = 12;
-    public bool resetAdaptationOnStart = true;
-
-    [Header("Primeras rondas cálidas")]
-    public int warmOnlyRounds = 10;
-
-    [Header("Mahoraga")]
-    [Min(1)] public int mahoragaMaxTurns = 12;
+    [Header("Animación Mahoraga")]
+    public MahoragaController mahoragaAnimation;
     public float adaptationSequenceDuration = 4f;
-    public MahoragaController mahoragaController;
-    public Color mahoragaMidPhaseColor = new Color32(55, 120, 170, 255);
-    [Range(0f, 1f)] public float mahoragaMaxBlend = 0.85f;
 
-    private int mahoragaRemainingTurns;
-    private float currentTime;
+    // Umbral de similitud para adaptación total (privado)
+    private float colorSimilarityThreshold = 0.05f;
+
+    // Sistema de aprendizaje
+    private Color averageSurvivorColor = Color.white;
+    private int totalSurvivorsProcessed = 0;
+    private bool hasSurvivorsEver = false;
+
+    // Adaptación total
+    private int killsThisRound = 0;
+    private bool isFullyAdapted = false;
+    private Color fixedSpawnColor = Color.white;
+
     private int score = 0;
     private int currentRound = 1;
+    private float currentTime;
     private bool isRoundTransitioning = false;
     private int lastTrophyTier = 0;
-
-    private readonly List<Color> killedColorHistory = new List<Color>();
 
     void Awake()
     {
@@ -60,76 +54,17 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
         Instance = this;
-        ResetRuntimeState();
-    }
-
-    void OnEnable()
-    {
-        if (Application.isPlaying)
-            ResetRuntimeState();
-    }
-
-    void OnValidate()
-    {
-        if (mahoragaMaxTurns < 1)
-            mahoragaMaxTurns = 1;
-
-        if (adaptationSequenceDuration < 0.1f)
-            adaptationSequenceDuration = 0.1f;
-
-        if (maxStoredKilledColors < 1)
-            maxStoredKilledColors = 1;
-
-        if (adaptationIncreasePerFailedRound < 0f)
-            adaptationIncreasePerFailedRound = 0f;
-
-        if (warmOnlyRounds < 1)
-            warmOnlyRounds = 1;
-    }
-
-    void ResetRuntimeState()
-    {
-        score = 0;
-        currentRound = 1;
-        currentTime = roundDuration;
-        isRoundTransitioning = false;
-        mahoragaRemainingTurns = mahoragaMaxTurns;
-        lastTrophyTier = 0;
-        killedColorHistory.Clear();
-
-        if (resetAdaptationOnStart)
-            adaptationLevel = 0f;
     }
 
     void Start()
     {
-        if (adaptText != null)
-        {
-            adaptText.text = "ADAPTANDOSE...";
-            adaptText.gameObject.SetActive(false);
-        }
-
-        if (mahoragaTurnsText != null)
-        {
-            mahoragaTurnsText.text = "";
-            mahoragaTurnsText.gameObject.SetActive(false);
-        }
-
-        if (scoreText != null)
-            scoreText.text = "SCORE: 0";
-
-        if (roundText != null)
-            roundText.text = "ROUND: 1";
-
-        if (timerText != null)
-            timerText.text = "TIME: " + Mathf.Ceil(roundDuration).ToString();
+        if (scoreText != null) scoreText.text = "SCORE: 0";
+        if (roundText != null) roundText.text = "ROUND: 1";
+        if (timerText != null) timerText.text = "TIME: " + Mathf.Ceil(roundDuration).ToString();
 
         UpdateTrophyVisual(false);
-
-        if (mahoragaController != null)
-            mahoragaController.Hide();
+        if (mahoragaAnimation != null) mahoragaAnimation.Hide();
 
         StartRound();
     }
@@ -151,7 +86,7 @@ public class GameManager : MonoBehaviour
     void StartRound()
     {
         currentTime = roundDuration;
-
+        killsThisRound = 0;
         if (timerText != null)
             timerText.text = "TIME: " + Mathf.Ceil(currentTime).ToString();
     }
@@ -159,147 +94,173 @@ public class GameManager : MonoBehaviour
     IEnumerator ResolveRound()
     {
         if (isRoundTransitioning) yield break;
-
         isRoundTransitioning = true;
+
         currentTime = 0f;
+        if (timerText != null) timerText.text = "TIME: 0";
 
-        if (timerText != null)
-            timerText.text = "TIME: 0";
+        // Obtener listas y filtrar objetos nulos/destruidos
+        GameObject[] allCells = GameObject.FindGameObjectsWithTag("Cell");
+        MiniBoss[] allBosses = FindObjectsByType<MiniBoss>(FindObjectsSortMode.None);
 
-        GameObject[] cells = GameObject.FindGameObjectsWithTag("Cell");
-        MiniBoss[] livingBosses = FindObjectsByType<MiniBoss>(FindObjectsSortMode.None);
-
-        bool hasLivingCells = cells.Length > 0;
-        bool hasLivingBosses = livingBosses.Length > 0;
-
-        if (hasLivingCells || hasLivingBosses)
+        List<GameObject> cells = new List<GameObject>();
+        foreach (var cellObj in allCells)
         {
-            adaptationLevel = Mathf.Clamp01(adaptationLevel + adaptationIncreasePerFailedRound);
+            if (cellObj != null) cells.Add(cellObj);
+        }
 
-            ConsumeMahoragaTurn();
-            ShowMahoragaUI();
+        List<MiniBoss> livingBosses = new List<MiniBoss>();
+        foreach (var boss in allBosses)
+        {
+            if (boss != null) livingBosses.Add(boss);
+        }
 
+        bool hasLivingCells = cells.Count > 0;
+        bool hasLivingBosses = livingBosses.Count > 0;
+        bool anySurvivor = hasLivingCells || hasLivingBosses;
+
+        // Detección de adaptación total
+        if (!isFullyAdapted && killsThisRound == 0 && hasLivingCells)
+        {
+            Color sum = Color.black;
+            int count = 0;
+            foreach (GameObject cellObj in cells)
+            {
+                if (cellObj == null) continue;
+                Cell c = cellObj.GetComponent<Cell>();
+                if (c != null && c.GetSpriteRenderer() != null)
+                {
+                    sum += c.GetSpriteRenderer().color;
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                Color avg = sum / count;
+                float maxDev = 0f;
+                foreach (GameObject cellObj in cells)
+                {
+                    if (cellObj == null) continue;
+                    Cell c = cellObj.GetComponent<Cell>();
+                    if (c != null && c.GetSpriteRenderer() != null)
+                    {
+                        Color col = c.GetSpriteRenderer().color;
+                        float dev = Mathf.Abs(col.r - avg.r) + Mathf.Abs(col.g - avg.g) + Mathf.Abs(col.b - avg.b);
+                        if (dev > maxDev) maxDev = dev;
+                    }
+                }
+                if (maxDev < colorSimilarityThreshold)
+                {
+                    isFullyAdapted = true;
+                    fixedSpawnColor = avg;
+                    Debug.Log("¡Adaptación total alcanzada! Color fijo: " + fixedSpawnColor);
+                }
+            }
+        }
+
+        // Aprendizaje a partir de células vivas
+        if (hasLivingCells)
+        {
+            Color sum = Color.black;
+            int count = 0;
+            foreach (GameObject cellObj in cells)
+            {
+                if (cellObj == null) continue;
+                Cell c = cellObj.GetComponent<Cell>();
+                if (c != null && c.GetSpriteRenderer() != null)
+                {
+                    sum += c.GetSpriteRenderer().color;
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                Color average = sum / count;
+                if (!hasSurvivorsEver)
+                {
+                    averageSurvivorColor = average;
+                    totalSurvivorsProcessed = count;
+                    hasSurvivorsEver = true;
+                }
+                else
+                {
+                    int newTotal = totalSurvivorsProcessed + count;
+                    averageSurvivorColor = (averageSurvivorColor * totalSurvivorsProcessed + sum) / newTotal;
+                    totalSurvivorsProcessed = newTotal;
+                }
+            }
+        }
+
+        // Animación de Mahoraga si hubo supervivientes
+        if (anySurvivor && mahoragaAnimation != null)
+        {
             if (AudioManager.Instance != null)
                 AudioManager.Instance.PlayMahoraga();
 
-            if (mahoragaController != null)
-                mahoragaController.PlaySequence(adaptationSequenceDuration);
-
-            if (hasLivingCells)
-            {
-                foreach (GameObject cellObj in cells)
-                {
-                    Cell c = cellObj.GetComponent<Cell>();
-                    if (c != null)
-                        c.BeginAdaptationSequence(GetFinalAdaptedColor(), adaptationSequenceDuration);
-                }
-            }
-
-            if (hasLivingBosses)
-            {
-                // Penalización: -5 por jefe no eliminado a tiempo, sin bajar de 0
-                AddScore(-5);
-
-                foreach (MiniBoss boss in livingBosses)
-                {
-                    if (boss != null)
-                        boss.BeginMahoragaElimination(adaptationSequenceDuration);
-                }
-            }
-
+            mahoragaAnimation.PlaySequence(adaptationSequenceDuration);
             yield return new WaitForSeconds(adaptationSequenceDuration);
-
-            HideMahoragaUI();
+            mahoragaAnimation.Hide();
+        }
+        else
+        {
+            yield return null;
         }
 
-        currentRound++;
+        // Volver a obtener las células que aún existen (algunas pudieron ser destruidas por explosión del miniboss)
+        GameObject[] survivingCells = GameObject.FindGameObjectsWithTag("Cell");
+        List<GameObject> finalCells = new List<GameObject>();
+        foreach (var cellObj in survivingCells)
+        {
+            if (cellObj != null) finalCells.Add(cellObj);
+        }
 
-        if (roundText != null)
-            roundText.text = "ROUND: " + currentRound;
+        // Aplicar animación de adaptación a las células que aún viven
+        foreach (GameObject cellObj in finalCells)
+        {
+            if (cellObj == null) continue; // Evitar objetos destruidos
+            Cell c = cellObj.GetComponent<Cell>();
+            if (c != null)
+                c.BeginAdaptationSequence(GetSpawnColor(), adaptationSequenceDuration);
+        }
+
+        // Miniboss: penalización y eliminación
+        if (hasLivingBosses)
+        {
+            AddScore(-5);
+            foreach (MiniBoss boss in livingBosses)
+            {
+                if (boss != null)
+                    boss.BeginMahoragaElimination(adaptationSequenceDuration);
+            }
+        }
+
+        // Avanzar ronda
+        currentRound++;
+        if (roundText != null) roundText.text = "ROUND: " + currentRound;
 
         StartRound();
         isRoundTransitioning = false;
     }
 
-    void ConsumeMahoragaTurn()
+    public void EndRoundEarly()
     {
-        if (mahoragaRemainingTurns > 0)
-            mahoragaRemainingTurns--;
-
-        if (mahoragaRemainingTurns <= 0)
-        {
-            mahoragaRemainingTurns = 0;
-            adaptationLevel = 1f;
-        }
+        if (isRoundTransitioning) return;
+        StartCoroutine(ResolveRound());
     }
 
-    void ShowMahoragaUI()
+    public void RegisterCellKill()
     {
-        if (adaptText != null)
-        {
-            adaptText.text = "ADAPTANDOSE...";
-            adaptText.gameObject.SetActive(true);
-        }
-
-        if (mahoragaTurnsText != null)
-        {
-            if (mahoragaRemainingTurns <= 0)
-                mahoragaTurnsText.text = "SE HA ADAPTADO POR COMPLETO";
-            else
-                mahoragaTurnsText.text = "QUEDAN " + mahoragaRemainingTurns + " GIROS";
-
-            mahoragaTurnsText.gameObject.SetActive(true);
-        }
+        killsThisRound++;
     }
 
-    void HideMahoragaUI()
-    {
-        if (adaptText != null)
-            adaptText.gameObject.SetActive(false);
-
-        if (mahoragaTurnsText != null)
-            mahoragaTurnsText.gameObject.SetActive(false);
-    }
-
-    public int GetCurrentRound()
-    {
-        return currentRound;
-    }
-
-    public float GetRemainingTime()
-    {
-        return currentTime;
-    }
-
-    public bool IsRoundTransitioning()
-    {
-        return isRoundTransitioning;
-    }
-
-    public int GetMahoragaRemainingTurns()
-    {
-        return mahoragaRemainingTurns;
-    }
-
-    public bool IsFullyAdapted()
-    {
-        return mahoragaRemainingTurns <= 0;
-    }
-
-    public Color GetFinalAdaptedColor()
-    {
-        return fullyAdaptedFinalColor;
-    }
+    public int GetCurrentRound() => currentRound;
+    public bool IsRoundTransitioning() => isRoundTransitioning;
 
     public void AddScore(int amount)
     {
         score += amount;
-        if (score < 0)
-            score = 0;
-
-        if (scoreText != null)
-            scoreText.text = "SCORE: " + score;
-
+        if (score < 0) score = 0;
+        if (scoreText != null) scoreText.text = "SCORE: " + score;
         UpdateTrophyVisual(true);
     }
 
@@ -318,27 +279,13 @@ public class GameManager : MonoBehaviour
 
         if (trophyImage != null)
         {
+            trophyImage.enabled = currentTier > 0;
             switch (currentTier)
             {
-                case 0:
-                    trophyImage.enabled = false;
-                    break;
-                case 1:
-                    trophyImage.enabled = true;
-                    trophyImage.sprite = bronzeTrophy;
-                    break;
-                case 2:
-                    trophyImage.enabled = true;
-                    trophyImage.sprite = silverTrophy;
-                    break;
-                case 3:
-                    trophyImage.enabled = true;
-                    trophyImage.sprite = goldTrophy;
-                    break;
-                case 4:
-                    trophyImage.enabled = true;
-                    trophyImage.sprite = finalTrophy;
-                    break;
+                case 1: trophyImage.sprite = bronzeTrophy; break;
+                case 2: trophyImage.sprite = silverTrophy; break;
+                case 3: trophyImage.sprite = goldTrophy; break;
+                case 4: trophyImage.sprite = finalTrophy; break;
             }
         }
 
@@ -354,102 +301,28 @@ public class GameManager : MonoBehaviour
         lastTrophyTier = currentTier;
     }
 
-    public void RegisterKilledCellColor(Color color)
-    {
-        killedColorHistory.Add(color);
-
-        if (killedColorHistory.Count > maxStoredKilledColors)
-            killedColorHistory.RemoveAt(0);
-    }
-
-    Color GetWarmOnlyBaseColor()
-    {
-        Color[] warmPalette = new Color[]
-        {
-            new Color32(220, 60, 60, 255),
-            new Color32(220, 60, 60, 255),
-            new Color32(235, 70, 50, 255),
-            new Color32(255, 210, 70, 255),
-            new Color32(255, 210, 70, 255),
-            new Color32(255, 180, 70, 255),
-            new Color32(255, 145, 60, 255),
-            new Color32(255, 130, 50, 255),
-            new Color32(190, 70, 120, 255),
-            new Color32(120, 80, 50, 255)
-        };
-
-        return warmPalette[Random.Range(0, warmPalette.Length)];
-    }
-
-    Color GetNormalBaseColor()
-    {
-        Color[] normalPalette = new Color[]
-        {
-            new Color32(220, 60, 60, 255),
-            new Color32(255, 210, 70, 255),
-            new Color32(160, 90, 220, 255),
-            new Color32(50, 50, 50, 255),
-            new Color32(235, 235, 235, 255),
-            new Color32(120, 80, 50, 255),
-            new Color32(255, 145, 60, 255),
-            new Color32(190, 70, 120, 255)
-        };
-
-        return normalPalette[Random.Range(0, normalPalette.Length)];
-    }
-
-    int GetMahoragaHalfTrigger()
-    {
-        return Mathf.CeilToInt(mahoragaMaxTurns / 2f);
-    }
-
-    bool IsMahoragaBluePhase()
-    {
-        int usedTurns = mahoragaMaxTurns - mahoragaRemainingTurns;
-        int halfTrigger = GetMahoragaHalfTrigger();
-        return usedTurns >= halfTrigger;
-    }
-
     public Color GetSpawnColor()
     {
-        if (mahoragaRemainingTurns <= 0)
-            return GetFinalAdaptedColor();
+        if (isFullyAdapted)
+            return fixedSpawnColor;
 
-        bool warmOnlyPhase = currentRound <= warmOnlyRounds && !IsMahoragaBluePhase();
-
-        if (warmOnlyPhase)
-            return GetWarmOnlyBaseColor();
-
-        Color randomBase = GetNormalBaseColor();
-        Color normalColor = randomBase;
-
-        if (killedColorHistory.Count > 0)
+        if (hasSurvivorsEver)
         {
-            Color avgKilled = Color.black;
-
-            for (int i = 0; i < killedColorHistory.Count; i++)
-                avgKilled += killedColorHistory[i];
-
-            avgKilled /= killedColorHistory.Count;
-
-            normalColor = Color.Lerp(randomBase, avgKilled, 0.12f);
+            float variation = 0.12f;
+            return new Color(
+                Mathf.Clamp01(averageSurvivorColor.r + Random.Range(-variation, variation)),
+                Mathf.Clamp01(averageSurvivorColor.g + Random.Range(-variation, variation)),
+                Mathf.Clamp01(averageSurvivorColor.b + Random.Range(-variation, variation)),
+                1f
+            );
         }
 
-        normalColor = Color.Lerp(normalColor, backgroundTargetColor, adaptationLevel * 0.18f);
-
-        if (!IsMahoragaBluePhase())
-            return normalColor;
-
-        int usedTurns = mahoragaMaxTurns - mahoragaRemainingTurns;
-        int halfTrigger = GetMahoragaHalfTrigger();
-        int bluePhaseSteps = Mathf.Max(1, mahoragaMaxTurns - halfTrigger);
-        int progressInBluePhase = usedTurns - halfTrigger + 1;
-        float mahoragaProgress = Mathf.Clamp01((float)progressInBluePhase / bluePhaseSteps);
-
-        Color blueishTarget = Color.Lerp(mahoragaMidPhaseColor, backgroundTargetColor, 0.55f);
-        float extraBlend = Mathf.Lerp(0.25f, mahoragaMaxBlend, mahoragaProgress);
-
-        return Color.Lerp(normalColor, blueishTarget, extraBlend);
+        return new Color(
+            Random.Range(0.2f, 1f),
+            Random.Range(0.2f, 1f),
+            Random.Range(0.2f, 1f),
+            1f
+        );
     }
 
     public Rect GetTrophyWorldBlockRect()
@@ -460,14 +333,11 @@ public class GameManager : MonoBehaviour
         RectTransform rt = trophyImage.rectTransform;
         Vector3[] corners = new Vector3[4];
         rt.GetWorldCorners(corners);
-
         Camera cam = Camera.main;
-        if (cam == null)
-            return new Rect(9999, 9999, 0, 0);
+        if (cam == null) return new Rect(9999, 9999, 0, 0);
 
         Vector3 bl = cam.ScreenToWorldPoint(cam.WorldToScreenPoint(corners[0]));
         Vector3 tr = cam.ScreenToWorldPoint(cam.WorldToScreenPoint(corners[2]));
-
         return Rect.MinMaxRect(bl.x, bl.y, tr.x, tr.y);
     }
 }
